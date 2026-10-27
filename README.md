@@ -1,6 +1,6 @@
 # Influencer Engagement Rate
 
-Shortlist Excel'indeki her influencer için Instagram ve TikTok'taki **son 5 paylaşıma** bakarak engagement rate (ER) hesaplar. Veriler Apify'daki actor'lerle çekilir.
+Shortlist Excel'indeki her influencer için Instagram ve TikTok'taki **son 5 içeriğe** bakarak engagement rate (ER) hesaplar ve tek sayfalık, tasarımlı bir Excel raporu üretir. Veriler (takipçi sayıları dahil) Apify'dan güncel olarak çekilir.
 
 ## Kurulum
 
@@ -12,69 +12,78 @@ Apify API token'ı: https://console.apify.com/settings/integrations
 
 ## Kullanım
 
-**1. Önce hesapları kontrol et** (Apify çalışmaz, ücret çıkmaz):
+**1. Önce linkleri kontrol et** (Apify çalışmaz, ücret çıkmaz):
 
 ```bash
 python engagement.py "Samsung - Shortlist.xlsx" --sadece-linkler
 ```
 
-Her influencer için bulunan Instagram / TikTok kullanıcı adını listeler. Aynı hesap birden fazla satırda geçiyorsa uyarı verir. Yanlış link varsa önce Excel'i düzelt.
+Her influencer için bulunan Instagram / TikTok hesabını ve olası link hatalarını listeler (aşağıda "Link kontrolü").
 
-**2. ER hesapla:**
+**2. Raporu oluştur:**
 
 ```bash
 export APIFY_TOKEN=apify_api_xxx
 python engagement.py "Samsung - Shortlist.xlsx"
 ```
 
-Çıktı: aynı klasörde `Samsung - Shortlist - ER.xlsx` (orijinal dosyaya dokunulmaz)
-- Shortlist'teki `ER%` kolonları doldurulur: **C = Instagram ER**, **E = TikTok ER**. Apify'dan verisi gelmeyen hesapta hücredeki mevcut değer olduğu gibi kalır; script bu hesapları sonda listeler.
-- `Post Detay` sayfası: hesaplamaya giren her post (tarih, link, like, share, yorum). Rakamları buradan kontrol edebilirsin.
+Çıktı aynı klasöre `Samsung - Shortlist - ER Raporu.xlsx` adıyla kaydedilir. Orijinal dosya değişmez.
+
+| Sayfa | İçerik |
+|---|---|
+| **Özet** | One-pager. Formüller ve açıklamalar en üstte; altında her influencer için Instagram ve TikTok hesabı (tıklanabilir), güncel takipçi, ER ve kontrol notu. ER kolonları renk skalalı. Yatay A4'e sığacak şekilde ayarlı. |
+| **Link Kontrol** | Her hesap için Apify'daki profil adı, Excel'deki takipçi ve güncel takipçi, uyarılar. Uyarılı satırlar en üstte. |
+| **Post Detay** | Hesaplamaya giren her içerik: tarih, link, beğeni, yorum, paylaşım, etkileşim, içerik ER'i. |
 
 ## Excel düzeni
 
 Script ilk sayfayı okur. 2. satır başlık, sonraki satırlar influencer:
 
-| A | B | C | D | E |
-|---|---|---|---|---|
-| Influencer | IG (hücreye profil linki bağlı) | ER% | TT (hücreye profil linki bağlı) | ER% |
+| A | B | D |
+|---|---|---|
+| Influencer | IG takipçi (hücreye profil linki bağlı) | TT takipçi (hücreye profil linki bağlı) |
 
-Kullanıcı adı, hücreye bağlı hyperlink'ten (`instagram.com/<kullanıcı>`, `tiktok.com/@<kullanıcı>`) okunur. Link olmayan (`-`) hücreler atlanır. Kolonlar değişirse `engagement.py` başındaki `IG_KOLON`, `IG_ER_KOLON`, `TT_KOLON`, `TT_ER_KOLON` sabitlerini güncelle.
+Kullanıcı adı, hücreye bağlı hyperlink'ten okunur (`instagram.com/<kullanıcı>`, `tiktok.com/@<kullanıcı>`). Link olmayan (`-`) hücreler atlanır. Kolonlar değişirse `engagement.py` başındaki `PLATFORMLAR` ayarını güncelle.
 
 ## Hesaplama
 
-Kullanılan Apify actor'leri (iki platform için toplam 2 çalıştırma, tüm hesaplar tek seferde):
+```
+Instagram ER = (Beğeni + Yorum) / Takipçi
+TikTok ER    = (Beğeni + Yorum + Paylaşım) / Takipçi
+```
 
-| Platform | Actor | Takipçi | Like | Share | Etiketleme |
+ER, hesabın **son 5 içeriğinin ortalamasıdır**:
+
+```
+ER = Son 5 içeriğin toplam etkileşimi / (Takipçi × 5)
+```
+
+Örnek: 100.000 takipçi, son 5 içerikte toplam 25.000 etkileşim → `25.000 / (100.000 × 5) = %5,00`
+
+- **Takipçi:** Apify'dan rapor anında çekilir; Excel'deki rakamlar ER için kullanılmaz, sadece link kontrolünde karşılaştırılır.
+- **Son 5 içerik:** Instagram'dan profilin son ~12 içeriği, TikTok'tan son 10 videosu çekilir. Yayın tarihine göre sıralanır ve en yeni 5'i alınır. Böylece en üste sabitlenmiş (pinned) eski içerikler hesaba girmez. 5'ten az içerik varsa mevcut içeriklerle hesaplanır.
+- **Gizli beğeni:** Beğenileri gizlenmiş Instagram içeriklerinde beğeni 0 sayılır.
+
+Kullanılan Apify actor'leri (her platform için tek çalıştırma, tüm hesaplar birlikte):
+
+| Platform | Actor | Takipçi | Beğeni | Yorum | Paylaşım |
 |---|---|---|---|---|---|
-| Instagram | `apify/instagram-profile-scraper` | `followersCount` | `likesCount` | yok (Instagram public vermiyor) → 0 | `commentsCount` |
-| TikTok | `clockworks/tiktok-scraper` | `authorMeta.fans` | `diggCount` | `shareCount` | `commentCount` |
+| Instagram | `apify/instagram-profile-scraper` | `followersCount` | `likesCount` | `commentsCount` | – |
+| TikTok | `clockworks/tiktok-scraper` | `authorMeta.fans` | `diggCount` | `commentCount` | `shareCount` |
 
-**Post başına etkileşim**
+## Link kontrolü
 
-```
-Etkileşim = Like + Share + Etiketleme
-```
+Yanlış girilmiş linkleri yakalamak için her hesap şu kurallarla kontrol edilir:
 
-- "Etiketleme" için platformların public bir sayacı yok. Etiketlemeler yorumlarda yapıldığı için en yakın karşılık olarak **yorum sayısı** kullanılıyor.
-- Instagram'da like sayısı gizlenmiş postlarda like 0 sayılır.
+- **Aynı hesap birden fazla influencer'da** geçiyor (ör. iki kişiye aynı TikTok linki verilmiş).
+- **Hesap adı influencer adıyla uyuşmuyor:** influencer adındaki kelimelerin hiçbiri ne kullanıcı adında ne de Apify'dan gelen profil adında geçiyor. Marka/takma adlı hesaplarda (ör. "Hype" → @aynisinemalar) normal olarak uyarı verebilir; göz ile kontrol yeterli.
+- **Takipçi Excel'dekinden çok farklı:** güncel takipçi, Excel'deki rakamın yarısından az ya da iki katından fazla.
+- **Apify'da bulunamadı:** hesap kapalı, silinmiş veya kullanıcı adı yanlış.
 
-**Platform ER** (son 5 post)
-
-```
-ER = Toplam Etkileşim / (Takipçi × Post Sayısı)
-```
-
-Toplam Etkileşim, 5 postun etkileşimlerinin toplamıdır. Bu, shortlist'teki notla aynı şeyi söyler: "Toplam Etkileşim / Toplam Takipçi, ortalama son 4-5 içerik bakılarak". Takipçi sayısı post sayısıyla çarpılır, böylece sonuç **post başına ortalama ER** olur. Hesapta 5'ten az post varsa mevcut postlarla hesaplanır.
-
-Örnek: 837.000 takipçi, son 5 postta toplam 52.500 etkileşim → `52500 / (837000 × 5) = %1,25`
-
-Takipçi sayısı Apify'dan anlık çekilir; Excel'deki B/D kolonlarındaki rakamlar kullanılmaz.
-
-**Son 5 post nasıl seçiliyor?** Instagram'dan profilin son ~12 postu, TikTok'tan son 10 videosu çekilir. Bunlar yayın tarihine göre sıralanır ve en yeni 5'i alınır. Böylece en üste sabitlenmiş (pinned) eski postlar hesaba girmez.
+`--sadece-linkler` modunda Apify çalışmadığı için sadece ilk iki kontrol (kullanıcı adına göre) yapılır.
 
 ## Ayar değiştirmek
 
 `engagement.py` dosyasının başında:
-- `POST_SAYISI = 5` → kaç post alınacağı
-- `IG_ALANLAR` / `TT_ALANLAR` → etkileşime hangi alanların gireceği (örn. TikTok'ta "Etiketleme" yerine kaydetme sayısını kullanmak için `"etiketleme": "collectCount"`)
+- `POST_SAYISI = 5`: kaç içerik alınacağı
+- `IG_ALANLAR` / `TT_ALANLAR`: etkileşime hangi alanların gireceği. Rapordaki formül metinleri de buradan üretilir.
