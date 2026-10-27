@@ -18,7 +18,7 @@ Apify API token'ı: https://console.apify.com/settings/integrations
 python engagement.py "Samsung - Shortlist.xlsx" --sadece-linkler
 ```
 
-Excel'de hangi satırda hangi Instagram / TikTok hesabının bulunduğunu listeler. Eksik ya da yanlış bulunan hesap varsa önce Excel'i düzelt.
+Her influencer için bulunan Instagram / TikTok kullanıcı adını listeler. Aynı hesap birden fazla satırda geçiyorsa uyarı verir. Yanlış link varsa önce Excel'i düzelt.
 
 **2. ER hesapla:**
 
@@ -27,17 +27,19 @@ export APIFY_TOKEN=apify_api_xxx
 python engagement.py "Samsung - Shortlist.xlsx"
 ```
 
-Çıktı: aynı klasörde `Samsung - Shortlist - ER.xlsx`
-- Orijinal sayfaların sağına şu kolonlar eklenir: `IG Takipçi`, `IG Post`, `IG Toplam Etkileşim`, `IG ER`, aynıları TikTok için (`TT ...`) ve `Genel ER`.
+Çıktı: aynı klasörde `Samsung - Shortlist - ER.xlsx` (orijinal dosyaya dokunulmaz)
+- Shortlist'teki `ER%` kolonları doldurulur: **C = Instagram ER**, **E = TikTok ER**. Apify'dan verisi gelmeyen hesapta hücredeki mevcut değer olduğu gibi kalır; script bu hesapları sonda listeler.
 - `Post Detay` sayfası: hesaplamaya giren her post (tarih, link, like, share, yorum). Rakamları buradan kontrol edebilirsin.
 
-## Hesapları nasıl buluyor?
+## Excel düzeni
 
-Her satırdaki tüm hücrelere bakar; hem hücre metnindeki hem de hücreye bağlı hyperlink'teki linkleri okur:
-- Instagram: `instagram.com/<kullanıcı>`
-- TikTok: `tiktok.com/@<kullanıcı>`
+Script ilk sayfayı okur. 2. satır başlık, sonraki satırlar influencer:
 
-Kolon adı önemli değil. Sadece `@kullanıcı` yazılıp link verilmemişse veya kısa link (`vm.tiktok.com/...`) varsa hesap bulunamaz; bunları tam profil linkiyle değiştir.
+| A | B | C | D | E |
+|---|---|---|---|---|
+| Influencer | IG (hücreye profil linki bağlı) | ER% | TT (hücreye profil linki bağlı) | ER% |
+
+Kullanıcı adı, hücreye bağlı hyperlink'ten (`instagram.com/<kullanıcı>`, `tiktok.com/@<kullanıcı>`) okunur. Link olmayan (`-`) hücreler atlanır. Kolonlar değişirse `engagement.py` başındaki `IG_KOLON`, `IG_ER_KOLON`, `TT_KOLON`, `TT_ER_KOLON` sabitlerini güncelle.
 
 ## Hesaplama
 
@@ -63,19 +65,13 @@ Etkileşim = Like + Share + Etiketleme
 ER = Toplam Etkileşim / (Takipçi × Post Sayısı)
 ```
 
-Toplam Etkileşim 5 postun toplamıdır. Takipçi, post sayısıyla çarpılıyor çünkü her post aynı takipçi kitlesine gösteriliyor; böylece sonuç "post başına ortalama ER" olur ve sektördeki %1–5 gibi benchmark'larla kıyaslanabilir. Hesapta 5'ten az post varsa olan postlarla hesaplanır.
+Toplam Etkileşim, 5 postun etkileşimlerinin toplamıdır. Bu, shortlist'teki notla aynı şeyi söyler: "Toplam Etkileşim / Toplam Takipçi, ortalama son 4-5 içerik bakılarak". Takipçi sayısı post sayısıyla çarpılır, böylece sonuç **post başına ortalama ER** olur. Hesapta 5'ten az post varsa mevcut postlarla hesaplanır.
 
-Örnek: 10.000 takipçi, son 5 postta toplam 5.050 etkileşim → `5050 / (10000 × 5) = %10,1`
+Örnek: 837.000 takipçi, son 5 postta toplam 52.500 etkileşim → `52500 / (837000 × 5) = %1,25`
 
-**Son 5 post nasıl seçiliyor?** Instagram'dan profilin son ~12 postu, TikTok'tan son 10 videosu çekilir, yayın tarihine göre sıralanıp en yeni 5'i alınır. Böylece en üste sabitlenmiş (pinned) eski postlar hesaba girmez.
+Takipçi sayısı Apify'dan anlık çekilir; Excel'deki B/D kolonlarındaki rakamlar kullanılmaz.
 
-**Genel ER** (influencer başına tek rakam)
-
-```
-Genel ER = (IG Toplam Etkileşim + TT Toplam Etkileşim) / (IG Takipçi × IG Post + TT Takipçi × TT Video)
-```
-
-Tek platformu olan influencer'da Genel ER o platformun ER'ine eşittir.
+**Son 5 post nasıl seçiliyor?** Instagram'dan profilin son ~12 postu, TikTok'tan son 10 videosu çekilir. Bunlar yayın tarihine göre sıralanır ve en yeni 5'i alınır. Böylece en üste sabitlenmiş (pinned) eski postlar hesaba girmez.
 
 ## Ayar değiştirmek
 

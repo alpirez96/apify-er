@@ -9,12 +9,19 @@ import argparse
 import os
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 
 from apify_client import ApifyClient
 from openpyxl import load_workbook
 
 POST_SAYISI = 5
+
+# Shortlist düzeni (ilk sayfa): 2. satır başlık, A=Influencer, B=IG (link), C=ER%, D=TT (link), E=ER%
+BASLIK_SATIRI = 2
+ISIM_KOLON = "A"
+IG_KOLON, IG_ER_KOLON = "B", "C"
+TT_KOLON, TT_ER_KOLON = "D", "E"
 
 IG_ACTOR = "apify/instagram-profile-scraper"
 TT_ACTOR = "clockworks/tiktok-scraper"
@@ -26,24 +33,24 @@ IG_ALANLAR = {"like": "likesCount", "share": None, "etiketleme": "commentsCount"
 TT_ALANLAR = {"like": "diggCount", "share": "shareCount", "etiketleme": "commentCount"}
 
 IG_REGEX = re.compile(r"instagram\.com/([A-Za-z0-9._]+)", re.I)
-IG_HARIC = {"p", "reel", "reels", "tv", "stories", "explore", "accounts"}
 TT_REGEX = re.compile(r"tiktok\.com/@([A-Za-z0-9._]+)", re.I)
 
 
-def hesaplari_bul(path):
-    """Her satırdaki hücre metinlerinden ve hyperlink'lerden IG / TikTok kullanıcı adlarını çıkarır."""
-    wb = load_workbook(path)
-    satirlar = []  # (sayfa adı, satır no, ig, tt)
-    for ws in wb.worksheets:
-        for row in ws.iter_rows():
-            metin = " ".join(
-                f"{c.value or ''} {c.hyperlink.target if c.hyperlink else ''}" for c in row
-            )
-            ig = next((u for u in IG_REGEX.findall(metin) if u.lower() not in IG_HARIC), None)
-            tt = next(iter(TT_REGEX.findall(metin)), None)
-            if ig or tt:
-                satirlar.append((ws.title, row[0].row, ig and ig.lower(), tt and tt.lower()))
-    return wb, satirlar
+def kullanici_adi(hucre, regex):
+    """Hücreye bağlı hyperlink'ten (yoksa hücre metninden) kullanıcı adını çıkarır."""
+    metin = f"{hucre.hyperlink.target if hucre.hyperlink else ''} {hucre.value or ''}"
+    eslesme = regex.search(metin)
+    return eslesme.group(1).lower() if eslesme else None
+
+
+def hesaplari_bul(ws):
+    satirlar = []  # (satır no, isim, ig, tt)
+    for no in range(BASLIK_SATIRI + 1, ws.max_row + 1):
+        ig = kullanici_adi(ws[f"{IG_KOLON}{no}"], IG_REGEX)
+        tt = kullanici_adi(ws[f"{TT_KOLON}{no}"], TT_REGEX)
+        if ig or tt:
+            satirlar.append((no, str(ws[f"{ISIM_KOLON}{no}"].value or "").strip(), ig, tt))
+    return satirlar
 
 
 def actor_calistir(client, actor, run_input):
@@ -100,13 +107,12 @@ def tiktok_verisi(client, kullanicilar):
     return sonuc
 
 
-def ozet(hesap):
-    """(takipçi, post sayısı, toplam etkileşim, ER) döner. ER = Toplam Etkileşim / (Takipçi x Post Sayısı)."""
+def engagement_rate(hesap):
+    """ER = Toplam Etkileşim / (Takipçi x Post Sayısı), yani post başına ortalama etkileşim / takipçi."""
     if not hesap or not hesap["postlar"] or not hesap["takipci"]:
         return None
-    n = len(hesap["postlar"])
     toplam = sum(p["like"] + p["share"] + p["etiketleme"] for p in hesap["postlar"])
-    return hesap["takipci"], n, toplam, toplam / (hesap["takipci"] * n)
+    return toplam / (hesap["takipci"] * len(hesap["postlar"]))
 
 
 def main():
@@ -115,10 +121,17 @@ def main():
     parser.add_argument("--sadece-linkler", action="store_true", help="Apify çalıştırmadan bulunan hesapları listele")
     args = parser.parse_args()
 
-    wb, satirlar = hesaplari_bul(args.excel)
-    print(f"{len(satirlar)} satırda hesap bulundu:")
-    for sayfa, no, ig, tt in satirlar:
-        print(f"  [{sayfa} #{no}] instagram={ig or '-'}  tiktok={tt or '-'}")
+    wb = load_workbook(args.excel)
+    ws = wb.worksheets[0]
+    satirlar = hesaplari_bul(ws)
+    print(f"{len(satirlar)} influencer bulundu:")
+    for no, isim, ig, tt in satirlar:
+        print(f"  #{no:<3} {isim:<28} instagram={ig or '-':<26} tiktok={tt or '-'}")
+    for platform, i in (("Instagram", 2), ("TikTok", 3)):
+        for kullanici, adet in Counter(s[i] for s in satirlar if s[i]).items():
+            if adet > 1:
+                isimler = ", ".join(s[1] for s in satirlar if s[i] == kullanici)
+                print(f"  UYARI: {platform} hesabı '{kullanici}' birden fazla satırda: {isimler}")
     if args.sadece_linkler:
         return
 
@@ -127,39 +140,28 @@ def main():
         sys.exit("APIFY_TOKEN ortam değişkeni tanımlı değil.")
     client = ApifyClient(token)
 
-    ig_kullanicilar = sorted({ig for _, _, ig, _ in satirlar if ig})
-    tt_kullanicilar = sorted({tt for _, _, _, tt in satirlar if tt})
+    ig_kullanicilar = sorted({s[2] for s in satirlar if s[2]})
+    tt_kullanicilar = sorted({s[3] for s in satirlar if s[3]})
     ig = instagram_verisi(client, ig_kullanicilar) if ig_kullanicilar else {}
     tt = tiktok_verisi(client, tt_kullanicilar) if tt_kullanicilar else {}
 
-    # Sonuçları her sayfanın sağına yeni kolonlar olarak yaz.
-    basliklar = ["IG Kullanıcı", "IG Takipçi", "IG Post", "IG Toplam Etkileşim", "IG ER",
-                 "TT Kullanıcı", "TT Takipçi", "TT Video", "TT Toplam Etkileşim", "TT ER", "Genel ER"]
-    ilk_kolon = {}
-    for sayfa, no, ig_ad, tt_ad in satirlar:
-        ws = wb[sayfa]
-        if sayfa not in ilk_kolon:
-            ilk_kolon[sayfa] = ws.max_column + 1
-            baslik_satiri = max(no - 1, 1)
-            for i, b in enumerate(basliklar):
-                ws.cell(baslik_satiri, ilk_kolon[sayfa] + i, b)
-        ig_ozet, tt_ozet = ozet(ig.get(ig_ad)), ozet(tt.get(tt_ad))
-        degerler = [ig_ad, *(ig_ozet or [None] * 4), tt_ad, *(tt_ozet or [None] * 4)]
-        # Genel ER = (IG + TT toplam etkileşim) / (IG takipçi x post + TT takipçi x video)
-        ozetler = [o for o in (ig_ozet, tt_ozet) if o]
-        degerler.append(sum(o[2] for o in ozetler) / sum(o[0] * o[1] for o in ozetler) if ozetler else None)
-        for i, d in enumerate(degerler):
-            c = ws.cell(no, ilk_kolon[sayfa] + i, d)
-            if basliklar[i].endswith("ER"):
-                c.number_format = "0.00%"
+    # ER'leri shortlist'teki ER% kolonlarına yaz. Veri gelmeyen hesapta mevcut değer olduğu gibi kalır.
+    for no, _, ig_ad, tt_ad in satirlar:
+        for veri, ad, kolon in ((ig, ig_ad, IG_ER_KOLON), (tt, tt_ad, TT_ER_KOLON)):
+            er = engagement_rate(veri.get(ad))
+            if er is not None:
+                ws[f"{kolon}{no}"] = er
+                ws[f"{kolon}{no}"].number_format = "0.00%"
 
     # Kontrol için post bazında detay sayfası.
     detay = wb.create_sheet("Post Detay")
-    detay.append(["Platform", "Kullanıcı", "Takipçi", "Tarih", "URL", "Like", "Share", "Etiketleme (Yorum)", "Etkileşim"])
-    for platform, veri in (("Instagram", ig), ("TikTok", tt)):
-        for kullanici, hesap in veri.items():
-            for p in hesap["postlar"]:
-                detay.append([platform, kullanici, hesap["takipci"], p["tarih"], p["url"],
+    detay.append(["Influencer", "Platform", "Kullanıcı", "Takipçi", "Tarih", "URL",
+                  "Like", "Share", "Etiketleme (Yorum)", "Etkileşim"])
+    for no, isim, ig_ad, tt_ad in satirlar:
+        for platform, veri, ad in (("Instagram", ig, ig_ad), ("TikTok", tt, tt_ad)):
+            hesap = veri.get(ad)
+            for p in (hesap or {}).get("postlar", []):
+                detay.append([isim, platform, ad, hesap["takipci"], p["tarih"], p["url"],
                               p["like"], p["share"], p["etiketleme"], p["like"] + p["share"] + p["etiketleme"]])
 
     bulunamayan = [f"IG:{u}" for u in ig_kullanicilar if u not in ig] + [f"TT:{u}" for u in tt_kullanicilar if u not in tt]
