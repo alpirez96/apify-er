@@ -56,7 +56,8 @@ python scripts/link_duzelt.py "<kopya.xlsx>" D54 https://www.tiktok.com/@obenalk
 APIFY_TOKEN=... python scripts/engagement.py "<shortlist.xlsx>" [kolon seçenekleri]
 ```
 
-- Token ortamda yoksa kullanıcıdan token'ı **sohbete yapıştırmasını isteme**. Ortam değişkeni ya da ortamın secret ayarı olarak tanımlamasını söyle (token: https://console.apify.com/settings/integrations).
+- Apify token'ı sadece bu adımda gerekir; 1–3. adımlar token olmadan çalışır. Token `APIFY_TOKEN` ortam değişkeninden okunur. Bir kez tanımlandıysa (Mac'te `~/.zshrc`'ye `export APIFY_TOKEN=...`, bulut oturumunda ortamın secret ayarı) her çalıştırmada kendiliğinden kullanılır, tekrar sorulmaz.
+- Token ortamda yoksa kullanıcıdan token'ı **sohbete yapıştırmasını isteme**; sohbet geçmişinde kalır. Bu adımı atla, o ana kadarki çıktıları (düzeltilmiş shortlist, link kontrol sonucu) teslim et ve token'ın nasıl tanımlanacağını söyle (token: https://console.apify.com/settings/integrations).
 - api.apify.com'a erişim yoksa (ör. bulut oturumunda ağ politikası engelliyorsa) bunu kullanıcıya söyle ve hostun izin listesine eklenmesi gerektiğini belirt. **Sahte veya tahmini veriyle rapor üretme.** Rakamlar müşteriye gidebilir.
 - Her platform için tek bir actor çalıştırması yapılır, tüm hesaplar birlikte gönderilir. Ücret kullanıcının Apify hesabından çıkar.
 
@@ -68,9 +69,11 @@ APIFY_TOKEN=... python scripts/engagement.py "<shortlist.xlsx>" [kolon seçenekl
 | Link Kontrol | Her hesabın Apify'daki profil adı, Excel'deki ve güncel takipçisi, uyarılar (uyarılılar üstte). |
 | Post Detay | ER'e giren her içerik: tarih, link, beğeni, yorum, paylaşım, etkileşim, içerik ER'i. |
 
-### 5. Sonucu özetle
+### 5. Dosyaları teslim et ve sonucu özetle
 
-Kullanıcıya şunları söyle:
+Kullanıcıya iki dosyayı ver: **ER raporu** ve linkler düzeltildiyse **düzeltilmiş shortlist**. Kullanıcının bilgisayarında çalışıyorsan dosyalar orijinalin yanındadır, tam yollarını söyle. Bulut oturumu veya claude.ai gibi kullanıcının dosya sistemine erişmediği bir ortamdaysan dosyayı mevcut dosya gönderme aracıyla (ya da ortamın çıktı klasörüne koyarak) indirilebilir şekilde ver; sadece yolunu söylemek yetmez.
+
+Ardından şunları söyle:
 - En yüksek ve en düşük ER'ler
 - Apify sonrası çıkan yeni uyarılar ("takipçi Excel'dekinden çok farklı" ve "Apify'da bulunamadı" sadece bu aşamada çıkar)
 - Verisi gelmeyen hesaplar
