@@ -2,10 +2,19 @@
 
 Shortlist Excel'indeki her influencer için Instagram ve TikTok'taki **son 5 içeriğe** bakarak engagement rate (ER) hesaplar ve tek sayfalık, tasarımlı bir Excel raporu üretir. Veriler (takipçi sayıları dahil) Apify'dan güncel olarak çekilir.
 
-## Kurulum
+## Claude skill'i olarak kullanım
+
+Bu repo bir Claude skill'i içerir: [`.claude/skills/influencer-engagement-rate`](.claude/skills/influencer-engagement-rate/SKILL.md). Skill; linkleri kontrol etme, yanlış linkleri web'de doğrulayıp düzeltme, raporu üretme ve sonucu özetleme adımlarını Claude'a anlatır.
+
+- **Claude Code:** Bu repoyu açman yeterli. Skill otomatik yüklenir. Shortlist'i verip "bu listenin ER'lerini çıkar" demen yeterli.
+- **claude.ai:** `influencer-engagement-rate.skill` dosyasını sohbette açıp **Save skill** ile profiline ekle. Kod çalıştırma ortamının api.apify.com'a erişimi olmalı.
+
+Skill'i güncellemek için `.claude/skills/influencer-engagement-rate` klasörünü düzenle. Hesaplama kuralları `SKILL.md` içinde, kod `scripts/` altında.
+
+## Kurulum (elle çalıştırmak için)
 
 ```bash
-pip install -r requirements.txt
+pip install -r .claude/skills/influencer-engagement-rate/requirements.txt
 ```
 
 Apify API token'ı: https://console.apify.com/settings/integrations
@@ -15,7 +24,7 @@ Apify API token'ı: https://console.apify.com/settings/integrations
 **1. Önce linkleri kontrol et** (Apify çalışmaz, ücret çıkmaz):
 
 ```bash
-python engagement.py "Samsung - Shortlist.xlsx" --sadece-linkler
+python .claude/skills/influencer-engagement-rate/scripts/engagement.py "Samsung - Shortlist.xlsx" --sadece-linkler
 ```
 
 Her influencer için bulunan Instagram / TikTok hesabını ve olası link hatalarını listeler (aşağıda "Link kontrolü").
@@ -24,7 +33,7 @@ Her influencer için bulunan Instagram / TikTok hesabını ve olası link hatala
 
 ```bash
 export APIFY_TOKEN=apify_api_xxx
-python engagement.py "Samsung - Shortlist.xlsx"
+python .claude/skills/influencer-engagement-rate/scripts/engagement.py "Samsung - Shortlist.xlsx"
 ```
 
 Çıktı aynı klasöre `Samsung - Shortlist - ER Raporu.xlsx` adıyla kaydedilir. Orijinal dosya değişmez.
@@ -43,7 +52,7 @@ Script ilk sayfayı okur. 2. satır başlık, sonraki satırlar influencer:
 |---|---|---|
 | Influencer | IG takipçi (hücreye profil linki bağlı) | TT takipçi (hücreye profil linki bağlı) |
 
-Kullanıcı adı, hücreye bağlı hyperlink'ten okunur (`instagram.com/<kullanıcı>`, `tiktok.com/@<kullanıcı>`). Link olmayan (`-`) hücreler atlanır. Kolonlar değişirse `engagement.py` başındaki `PLATFORMLAR` ayarını güncelle.
+Kullanıcı adı, hücreye bağlı hyperlink'ten okunur (`instagram.com/<kullanıcı>`, `tiktok.com/@<kullanıcı>`). Link olmayan (`-`) hücreler atlanır. Farklı düzendeki bir shortlist için: `--sayfa`, `--baslik-satiri`, `--isim-kolon`, `--ig-kolon`, `--tt-kolon` (platform yoksa `--tt-kolon ""`).
 
 ## Hesaplama
 
@@ -82,8 +91,16 @@ Yanlış girilmiş linkleri yakalamak için her hesap şu kurallarla kontrol edi
 
 `--sadece-linkler` modunda Apify çalışmadığı için sadece ilk iki kontrol (kullanıcı adına göre) yapılır.
 
+Yanlış bir linki düzeltmek için (hücrede görünen takipçi metniyle birlikte):
+
+```bash
+python .claude/skills/influencer-engagement-rate/scripts/link_duzelt.py "Samsung - Shortlist.xlsx" D54 https://www.tiktok.com/@obenalkan --deger 197K
+```
+
+Dosya openpyxl ile yeniden kaydedilmez, sadece o hücrenin XML'i değişir. Böylece Microsoft hassasiyet etiketi gibi parçalar korunur.
+
 ## Ayar değiştirmek
 
-`engagement.py` dosyasının başında:
+`.claude/skills/influencer-engagement-rate/scripts/engagement.py` dosyasının başında:
 - `POST_SAYISI = 5`: kaç içerik alınacağı
 - `IG_ALANLAR` / `TT_ALANLAR`: etkileşime hangi alanların gireceği. Rapordaki formül metinleri de buradan üretilir.

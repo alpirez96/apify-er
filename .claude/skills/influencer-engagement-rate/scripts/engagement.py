@@ -3,6 +3,8 @@
 Kullanım:
     python engagement.py "Samsung - Shortlist.xlsx" --sadece-linkler   # hesapları ve olası link hatalarını listeler
     APIFY_TOKEN=... python engagement.py "Samsung - Shortlist.xlsx"    # Apify'ı çalıştırıp raporu oluşturur
+
+Kolon düzeni farklı bir shortlist için: --sayfa, --baslik-satiri, --isim-kolon, --ig-kolon, --tt-kolon
 """
 
 import argparse
@@ -20,12 +22,10 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 POST_SAYISI = 5
 
-# Shortlist düzeni (ilk sayfa): 2. satır başlık, A=Influencer, B=IG takipçi (profil linki bağlı), D=TT takipçi (link bağlı)
-BASLIK_SATIRI = 2
-ISIM_KOLON = "A"
+# Platform: (linkten kullanıcı adını alan regex, profil linki şablonu)
 PLATFORMLAR = {
-    "Instagram": ("B", re.compile(r"instagram\.com/([A-Za-z0-9._]+)", re.I), "https://www.instagram.com/{}/"),
-    "TikTok": ("D", re.compile(r"tiktok\.com/@([A-Za-z0-9._]+)", re.I), "https://www.tiktok.com/@{}"),
+    "Instagram": (re.compile(r"instagram\.com/([A-Za-z0-9._]+)", re.I), "https://www.instagram.com/{}/"),
+    "TikTok": (re.compile(r"tiktok\.com/@([A-Za-z0-9._]+)", re.I), "https://www.tiktok.com/@{}"),
 }
 
 IG_ACTOR = "apify/instagram-profile-scraper"
@@ -49,18 +49,20 @@ def sayi(deger):
     return float(m.group(1)) * {"": 1, "K": 1e3, "M": 1e6}[m.group(2).upper()] if m else None
 
 
-def hesaplari_bul(ws):
-    """Her influencer için {no, isim, hesaplar: {platform: (kullanıcı adı, Excel'deki takipçi)}} döner."""
+def hesaplari_bul(ws, baslik_satiri, isim_kolon, kolonlar):
+    """Her influencer için {no, isim, hesaplar: {platform: (kullanıcı adı, Excel'deki takipçi)}} döner.
+    kolonlar: {platform: profil linkinin bulunduğu kolon}"""
     satirlar = []
-    for no in range(BASLIK_SATIRI + 1, ws.max_row + 1):
+    for no in range(baslik_satiri + 1, ws.max_row + 1):
         hesaplar = {}
-        for platform, (kolon, regex, _) in PLATFORMLAR.items():
+        for platform, kolon in kolonlar.items():
+            regex = PLATFORMLAR[platform][0]
             hucre = ws[f"{kolon}{no}"]
             eslesme = regex.search(f"{hucre.hyperlink.target if hucre.hyperlink else ''} {hucre.value or ''}")
             if eslesme:
                 hesaplar[platform] = (eslesme.group(1).lower(), sayi(hucre.value))
         if hesaplar:
-            satirlar.append({"no": no, "isim": str(ws[f"{ISIM_KOLON}{no}"].value or "").strip(), "hesaplar": hesaplar})
+            satirlar.append({"no": no, "isim": str(ws[f"{isim_kolon}{no}"].value or "").strip(), "hesaplar": hesaplar})
     return satirlar
 
 
@@ -266,7 +268,7 @@ def ozet_sayfasi(ws, kaynak, satirlar, veri, uyarilar):
         for kolon, platform in ((2, "Instagram"), (5, "TikTok")):
             ad, _ = s["hesaplar"].get(platform, (None, None))
             hesap = veri[platform].get(ad)
-            hucre(ws, satir, kolon, ad and f"@{ad}", link=ad and PLATFORMLAR[platform][2].format(ad))
+            hucre(ws, satir, kolon, ad and f"@{ad}", link=ad and PLATFORMLAR[platform][1].format(ad))
             hucre(ws, satir, kolon + 1, hesap and hesap["takipci"], TAKIPCI_FORMAT)
             hucre(ws, satir, kolon + 2, engagement_rate(hesap), "0.00%")
             if uyarilar.get((s["no"], platform)):
@@ -293,7 +295,7 @@ def link_kontrol_sayfasi(ws, satirlar, veri, uyarilar):
         u = uyarilar[(s["no"], platform)]
         hucre(ws, satir, 1, s["isim"])
         hucre(ws, satir, 2, platform)
-        hucre(ws, satir, 3, f"@{ad}", link=PLATFORMLAR[platform][2].format(ad))
+        hucre(ws, satir, 3, f"@{ad}", link=PLATFORMLAR[platform][1].format(ad))
         hucre(ws, satir, 4, hesap and hesap["ad"])
         hucre(ws, satir, 5, excel_takipci, TAKIPCI_FORMAT)
         hucre(ws, satir, 6, hesap and hesap["takipci"], TAKIPCI_FORMAT)
@@ -345,9 +347,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("excel", type=Path)
     parser.add_argument("--sadece-linkler", action="store_true", help="Apify çalıştırmadan hesapları ve olası link hatalarını listele")
+    parser.add_argument("--sayfa", help="Shortlist'in bulunduğu sayfa adı (varsayılan: ilk sayfa)")
+    parser.add_argument("--baslik-satiri", type=int, default=2, help="Kolon başlıklarının olduğu satır (varsayılan: 2)")
+    parser.add_argument("--isim-kolon", default="A", help="Influencer adı kolonu (varsayılan: A)")
+    parser.add_argument("--ig-kolon", default="B", help="Instagram profil linki kolonu, yoksa boş bırak (varsayılan: B)")
+    parser.add_argument("--tt-kolon", default="D", help="TikTok profil linki kolonu, yoksa boş bırak (varsayılan: D)")
     args = parser.parse_args()
 
-    satirlar = hesaplari_bul(load_workbook(args.excel).worksheets[0])
+    wb = load_workbook(args.excel)
+    kolonlar = {p: k.upper() for p, k in (("Instagram", args.ig_kolon), ("TikTok", args.tt_kolon)) if k}
+    satirlar = hesaplari_bul(wb[args.sayfa] if args.sayfa else wb.worksheets[0], args.baslik_satiri, args.isim_kolon.upper(), kolonlar)
     print(f"{len(satirlar)} influencer bulundu:")
     for s in satirlar:
         ig, tt = (s["hesaplar"].get(p, ("-",))[0] for p in PLATFORMLAR)
