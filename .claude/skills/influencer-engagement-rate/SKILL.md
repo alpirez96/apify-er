@@ -16,6 +16,22 @@ Kurulum: `pip install -r requirements.txt`
 
 ## Akış
 
+### 0. Apify key'ini kullanıcıyla birlikte kontrol et
+
+Skill Apify key'i olmadan çalışmaz; script de key yoksa hiçbir modda çalışmaz. Shortlist'e bakmadan önce, **her çalıştırmada** kullanılacak key'i kullanıcıyla birlikte netleştir. Ekipte birden fazla Apify hesabı olabilir ve ücret seçilen hesaptan çıkar; yanlış hesapla çalışmak sonradan fark edilmesi zor bir hatadır.
+
+1. Ortamda `APIFY_TOKEN` var mı bak, değerini yazdırma: `test -n "$APIFY_TOKEN" && echo var || echo yok`
+2. **Yoksa** kullanıcıdan key'i iste ve key gelene kadar başka hiçbir adıma geçme. Key'i Apify Console → Settings → Integrations'tan (https://console.apify.com/settings/integrations) alabilir. İki yolu var:
+   - Ortam değişkeni olarak tanımlaması (Mac'te `~/.zshrc`'ye `export APIFY_TOKEN=...`, bulut oturumunda ortamın secret ayarı). Kalıcıdır, önerilen yol budur.
+   - Sohbete yapıştırması. Bu durumda key'i sadece komutların başında ortam değişkeni olarak ver (`APIFY_TOKEN='...' python ...`). Hiçbir dosyaya yazma, cevaplarında tamamını tekrar etme. Sohbet geçmişinde kalacağını bir kez hatırlat.
+3. Key'i doğrula ve hangi hesaba ait olduğunu göster:
+   ```bash
+   python scripts/engagement.py --key-kontrol
+   ```
+   Çıktı: `Apify key: apify_api_Ab…1234 | hesap: <kullanıcı adı> <e-posta>`. Bu satırı kullanıcıya göster ve **"Bu key / hesapla devam edeyim mi?"** diye sor. Onay gelmeden devam etme. Key ortamda tanımlı olsa bile bu onayı her seferinde al. Kullanıcı başka bir key isterse 2. adıma dön.
+
+Script her çalıştırmada aynı satırı en başta tekrar yazdırır. Sonraki adımlarda hesabın değişmediğini buradan görebilirsin.
+
 ### 1. Shortlist'i incele
 
 openpyxl ile ilk ~10 satıra bak; hücre değerlerini ve **hyperlink hedeflerini** birlikte yazdır. Linkler genelde takipçi sayısının yazdığı hücreye bağlıdır (hücrede "837K" görünür, link profile gider). Şunları belirle:
@@ -32,7 +48,7 @@ Excel'de metodoloji notu varsa (ör. "Engagement Rate = Toplam Etkileşim / Topl
 python scripts/engagement.py "<shortlist.xlsx>" --sadece-linkler [kolon seçenekleri]
 ```
 
-Bu adım Apify'a gitmez ve ücret çıkarmaz. Kullanıcıya kısaca özetle: kaç influencer bulundu, kimin TikTok'u veya Instagram'ı yok, hangi uyarılar çıktı.
+Bu adım sadece key'i doğrular, actor çalıştırmaz, ücret çıkmaz. Kullanıcıya kısaca özetle: kaç influencer bulundu, kimin TikTok'u veya Instagram'ı yok, hangi uyarılar çıktı.
 
 Uyarıları şöyle değerlendir:
 - **"aynı hesap başka bir influencer'da da var"**: neredeyse her zaman kopyala-yapıştır hatasıdır. Hangi satırın yanlış olduğunu isimden anla.
@@ -56,8 +72,7 @@ python scripts/link_duzelt.py "<kopya.xlsx>" D54 https://www.tiktok.com/@obenalk
 APIFY_TOKEN=... python scripts/engagement.py "<shortlist.xlsx>" [kolon seçenekleri]
 ```
 
-- Apify token'ı sadece bu adımda gerekir; 1–3. adımlar token olmadan çalışır. Token `APIFY_TOKEN` ortam değişkeninden okunur. Bir kez tanımlandıysa (Mac'te `~/.zshrc`'ye `export APIFY_TOKEN=...`, bulut oturumunda ortamın secret ayarı) her çalıştırmada kendiliğinden kullanılır, tekrar sorulmaz.
-- Token ortamda yoksa kullanıcıdan token'ı **sohbete yapıştırmasını isteme**; sohbet geçmişinde kalır. Bu adımı atla, o ana kadarki çıktıları (düzeltilmiş shortlist, link kontrol sonucu) teslim et ve token'ın nasıl tanımlanacağını söyle (token: https://console.apify.com/settings/integrations).
+- Bu adımda 0. adımda onaylanan key kullanılır. Çıktının ilk satırındaki hesabın onaylananla aynı olduğuna bak.
 - api.apify.com'a erişim yoksa (ör. bulut oturumunda ağ politikası engelliyorsa) bunu kullanıcıya söyle ve hostun izin listesine eklenmesi gerektiğini belirt. **Sahte veya tahmini veriyle rapor üretme.** Rakamlar müşteriye gidebilir.
 - Her platform için tek bir actor çalıştırması yapılır, tüm hesaplar birlikte gönderilir. Ücret kullanıcının Apify hesabından çıkar.
 

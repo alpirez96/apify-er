@@ -1,8 +1,11 @@
 """Shortlist Excel'indeki influencer'lar için Instagram ve TikTok engagement rate raporu üretir.
 
 Kullanım:
-    python engagement.py "Samsung - Shortlist.xlsx" --sadece-linkler   # hesapları ve olası link hatalarını listeler
-    APIFY_TOKEN=... python engagement.py "Samsung - Shortlist.xlsx"    # Apify'ı çalıştırıp raporu oluşturur
+    APIFY_TOKEN=... python engagement.py "Samsung - Shortlist.xlsx" --sadece-linkler   # hesapları ve olası link hatalarını listeler
+    APIFY_TOKEN=... python engagement.py "Samsung - Shortlist.xlsx"                    # Apify'ı çalıştırıp raporu oluşturur
+
+Apify key'i (APIFY_TOKEN) her modda zorunludur. Hangi key'in / hesabın kullanılacağını görmek için:
+    APIFY_TOKEN=... python engagement.py --key-kontrol
 
 Kolon düzeni farklı bir shortlist için: --sayfa, --baslik-satiri, --isim-kolon, --ig-kolon, --tt-kolon
 """
@@ -100,6 +103,21 @@ def link_uyarilari(satirlar, veri=None):
 
 
 # --- Apify ---
+
+def apify_baglan():
+    """Key'i okur, geçerli olduğunu ve Apify'a erişildiğini doğrular, hangi hesabın kullanılacağını yazdırır."""
+    token = os.environ.get("APIFY_TOKEN")
+    if not token:
+        sys.exit("APIFY_TOKEN tanımlı değil. Apify key'i olmadan çalışmaz: https://console.apify.com/settings/integrations")
+    client = ApifyClient(token)
+    try:
+        hesap = client.user().get()
+    except Exception as hata:
+        sys.exit(f"Apify'a bağlanılamadı (key geçersiz olabilir ya da api.apify.com'a erişim yok): {hata}")
+    maskeli = f"{token[:12]}…{token[-4:]}" if len(token) > 20 else "…"
+    print(f"Apify key: {maskeli}  |  hesap: {getattr(hesap, 'username', '?')}  {getattr(hesap, 'email', None) or ''}")
+    return client
+
 
 def actor_calistir(client, actor, run_input):
     print(f"-> {actor} çalışıyor...")
@@ -345,7 +363,8 @@ def uyarilari_yazdir(satirlar, uyarilar):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("excel", type=Path)
+    parser.add_argument("excel", type=Path, nargs="?")
+    parser.add_argument("--key-kontrol", action="store_true", help="Sadece hangi Apify key'inin ve hesabının kullanılacağını göster")
     parser.add_argument("--sadece-linkler", action="store_true", help="Apify çalıştırmadan hesapları ve olası link hatalarını listele")
     parser.add_argument("--sayfa", help="Shortlist'in bulunduğu sayfa adı (varsayılan: ilk sayfa)")
     parser.add_argument("--baslik-satiri", type=int, default=2, help="Kolon başlıklarının olduğu satır (varsayılan: 2)")
@@ -353,6 +372,13 @@ def main():
     parser.add_argument("--ig-kolon", default="B", help="Instagram profil linki kolonu, yoksa boş bırak (varsayılan: B)")
     parser.add_argument("--tt-kolon", default="D", help="TikTok profil linki kolonu, yoksa boş bırak (varsayılan: D)")
     args = parser.parse_args()
+
+    # Apify key'i olmadan hiçbir adım çalışmaz; iş başlamadan key doğrulanır ve hangi hesabın kullanılacağı gösterilir.
+    client = apify_baglan()
+    if args.key_kontrol:
+        return
+    if not args.excel:
+        parser.error("Shortlist Excel dosyası gerekli.")
 
     wb = load_workbook(args.excel)
     kolonlar = {p: k.upper() for p, k in (("Instagram", args.ig_kolon), ("TikTok", args.tt_kolon)) if k}
@@ -364,11 +390,6 @@ def main():
     if args.sadece_linkler:
         uyarilari_yazdir(satirlar, link_uyarilari(satirlar))
         return
-
-    token = os.environ.get("APIFY_TOKEN")
-    if not token:
-        sys.exit("APIFY_TOKEN ortam değişkeni tanımlı değil.")
-    client = ApifyClient(token)
 
     kullanicilar = {p: sorted({s["hesaplar"][p][0] for s in satirlar if p in s["hesaplar"]}) for p in PLATFORMLAR}
     veri = {

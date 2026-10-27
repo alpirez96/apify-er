@@ -4,7 +4,9 @@ Shortlist Excel'indeki her influencer için Instagram ve TikTok'taki **son 5 iç
 
 ## Claude skill'i olarak kullanım
 
-Bu repo bir Claude skill'i içerir: [`.claude/skills/influencer-engagement-rate`](.claude/skills/influencer-engagement-rate/SKILL.md). Skill; linkleri kontrol etme, yanlış linkleri web'de doğrulayıp düzeltme, raporu üretme ve sonucu özetleme adımlarını Claude'a anlatır.
+Bu repo bir Claude skill'i içerir: [`.claude/skills/influencer-engagement-rate`](.claude/skills/influencer-engagement-rate/SKILL.md). Skill; Apify key'ini seninle kontrol etme, linkleri kontrol etme, yanlış linkleri web'de doğrulayıp düzeltme, raporu üretme ve sonucu özetleme adımlarını Claude'a anlatır.
+
+Skill Apify key'i olmadan çalışmaz. Her çalıştırmanın başında Claude key'in hangi Apify hesabına ait olduğunu (maskelenmiş key, kullanıcı adı, e-posta) gösterir ve sen onaylamadan devam etmez. Key tanımlı değilse önce key'i ister.
 
 - **Claude Code:** Bu repoyu açman yeterli. Skill otomatik yüklenir. Shortlist'i verip "bu listenin ER'lerini çıkar" demen yeterli.
 - **claude.ai:** `influencer-engagement-rate.skill` dosyasını sohbette açıp **Save skill** ile profiline ekle. Kod çalıştırma ortamının api.apify.com'a erişimi olmalı.
@@ -17,11 +19,22 @@ Skill'i güncellemek için `.claude/skills/influencer-engagement-rate` klasörü
 pip install -r .claude/skills/influencer-engagement-rate/requirements.txt
 ```
 
-Apify API token'ı: https://console.apify.com/settings/integrations
+Apify key'i (API token) zorunludur, script her modda önce key'i doğrular: https://console.apify.com/settings/integrations
+
+```bash
+export APIFY_TOKEN=apify_api_xxx   # kalıcı olması için ~/.zshrc'ye ekle
+```
 
 ## Kullanım
 
-**1. Önce linkleri kontrol et** (Apify çalışmaz, ücret çıkmaz):
+**0. Hangi key / hesap kullanılacak, kontrol et:**
+
+```bash
+python .claude/skills/influencer-engagement-rate/scripts/engagement.py --key-kontrol
+# Apify key: apify_api_Ab…1234  |  hesap: kullaniciadi  eposta@ornek.com
+```
+
+**1. Linkleri kontrol et** (actor çalışmaz, ücret çıkmaz):
 
 ```bash
 python .claude/skills/influencer-engagement-rate/scripts/engagement.py "Samsung - Shortlist.xlsx" --sadece-linkler
@@ -32,7 +45,6 @@ Her influencer için bulunan Instagram / TikTok hesabını ve olası link hatala
 **2. Raporu oluştur:**
 
 ```bash
-export APIFY_TOKEN=apify_api_xxx
 python .claude/skills/influencer-engagement-rate/scripts/engagement.py "Samsung - Shortlist.xlsx"
 ```
 
@@ -89,7 +101,7 @@ Yanlış girilmiş linkleri yakalamak için her hesap şu kurallarla kontrol edi
 - **Takipçi Excel'dekinden çok farklı:** güncel takipçi, Excel'deki rakamın yarısından az ya da iki katından fazla.
 - **Apify'da bulunamadı:** hesap kapalı, silinmiş veya kullanıcı adı yanlış.
 
-`--sadece-linkler` modunda Apify çalışmadığı için sadece ilk iki kontrol (kullanıcı adına göre) yapılır.
+`--sadece-linkler` modunda actor çalışmadığı için sadece ilk iki kontrol (kullanıcı adına göre) yapılır.
 
 Yanlış bir linki düzeltmek için (hücrede görünen takipçi metniyle birlikte):
 
